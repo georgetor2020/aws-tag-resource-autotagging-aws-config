@@ -78,3 +78,75 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
+
+Got it 👍 — in aws-samples/resource-autotagging-aws-config, the tag values you want to auto-apply are configured in AWS Systems Manager Parameter Store. The Lambda reads them at runtime and applies them to any resources AWS Config marks as non-compliant.
+
+Here’s how you set it up:
+
+1. Define Your Tag Key/Value Pairs in Parameter Store
+
+The solution expects a JSON object stored in SSM Parameter Store.
+
+For example:
+
+aws ssm put-parameter \
+  --name /autotag/tags \
+  --type String \
+  --value '{"Environment":"dev","Owner":"data-team","CostCenter":"1234"}' \
+  --overwrite
+
+
+This will create a parameter /autotag/tags that looks like:
+
+{
+  "Environment": "dev",
+  "Owner": "data-team",
+  "CostCenter": "1234"
+}
+
+2. Configure Which Resources to Monitor
+
+Inside the Terraform module (or CloudFormation if you extend it), you’ll find a variable called:
+
+variable "compliance_resource_types" {
+  default = ["AWS::EC2::Instance", "AWS::S3::Bucket"]
+}
+
+
+You can update this list to include any AWS Config–supported resource types you want auto-tagged, e.g.:
+
+compliance_resource_types = [
+  "AWS::EC2::Instance",
+  "AWS::S3::Bucket",
+  "AWS::Lambda::Function",
+  "AWS::Glue::Database",
+  "AWS::CodeBuild::Project",
+  "AWS::CodePipeline::Pipeline"
+]
+
+3. Lambda Applies the Tags
+
+AWS Config marks resources missing those required tags as non-compliant.
+
+An EventBridge rule sends the compliance event to SQS → Lambda.
+
+The Lambda looks up /autotag/tags in Parameter Store.
+
+It then calls the appropriate AWS tagging API (e.g., CreateTags, TagResource) to apply or update the tags.
+
+4. Updating Tags
+
+If you want to change or add tags later, just update the Parameter Store entry:
+
+aws ssm put-parameter \
+  --name /autotag/tags \
+  --type String \
+  --value '{"Environment":"prod","Owner":"analytics-team","CostCenter":"5678"}' \
+  --overwrite
+
+
+The Lambda will automatically pick up the new values the next time it runs.
+
+✅ So the tags are centrally managed in SSM Parameter Store → no need to edit the Lambda itself each time.
+
+Do you want me to show you a ready-to-use Terraform snippet where we define both the compliance_resource_types and the /autotag/tags Parameter in one shot?
